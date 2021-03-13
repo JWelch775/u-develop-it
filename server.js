@@ -60,6 +60,7 @@ const db = new sqlite3.Database('./db/election.db', err =>{
 //indicates a user request error. The return statement will exit out of the database call once an error 
 //is encountered.
 
+//route for calling all candidates 
 app.get("/api/candidates", (req, res)=> {
     const sql = `SELECT candidates.*, parties.name
                  AS party_name
@@ -80,14 +81,14 @@ app.get("/api/candidates", (req, res)=> {
     });
 });
 
-//api call for retrieving a single candidate
+//route for getting a candidate based on id
 app.get("/api/candidates/:id", (req, res)=> {
     const sql = `SELECT candidates.*, parties.name
                  AS party_name
                  FROM candidates
                  LEFT JOIN parties
                  ON candidates.party_id = parties.id 
-                 WHERE id = ?`;
+                 WHERE candidates.id = ?`;
     const params = [req.params.id];
 
     db.get(sql, params, (err, rows)=> {
@@ -97,6 +98,43 @@ app.get("/api/candidates/:id", (req, res)=> {
         }
         res.json({
             message: 'success',
+            data: rows
+        });
+    });
+});
+
+//route for getting all parties
+app.get('/api/parties', (req, res) => {
+    const sql = `SELECT * FROM parties`;
+    const params = [];
+
+    db.all(sql, params, (err, rows) => {
+        if(err) {
+            res.status(500).json( {error: err.message} );
+            return;
+        }
+
+        res.json({
+            message: 'success',
+            data: rows
+        });
+    });
+});
+
+//route for getting a party by id
+app.get('/api/parties/:id', (req, res) => {
+    const sql = `SELECT * FROM parties
+                 WHERE id = ?`
+    const params = [req.params.id];
+    
+    db.get(sql, params, (err, rows) => {
+        if(err) {
+            res.status(400).json( {error: err.message} );
+            return;
+        }
+
+        res.json({
+            message:'success',
             data: rows
         });
     });
@@ -114,6 +152,7 @@ app.get("/api/candidates/:id", (req, res)=> {
 //The JSON object route response will be the message "successfully deleted", with the changes property 
 //set to this.changes. Again, this will verify whether any rows were changed.
 
+//route for deleting a candidate
 app.delete('/api/candidates/:id', (req, res)=> {
     const sql = `DELETE FROM candidates
                  WHERE id = ?`;
@@ -130,6 +169,20 @@ app.delete('/api/candidates/:id', (req, res)=> {
         });
     });
 });
+//route for deleting a party
+app.delete('/api/parties/:id', (req, res) => {
+    const sql = `DELETE FROM parties WHERE id = ?`;
+    const params = [req.params.id];
+
+    db.run(sql, params, function(err, result) {
+        if(err) {
+            res.status(400).json({ error: res.message} );
+            return;
+        }
+
+        res.json({message: 'successfully deleted', changes: this.changes });
+    });
+});
 
 //Let's walk through the following code. Notice that the database call here uses a prepared statement that's a bit 
 //different than the one we used previously in the lesson. This is because there is no column for the id. SQLite 
@@ -142,6 +195,7 @@ app.delete('/api/candidates/:id', (req, res)=> {
 //bound to this. Then we send the response using the res.json() method with this.lastID, the id of the inserted row. 
 //Also included in the response is the success message and the user data that was used to create the new data entry.
 
+//route for adding a new candidate
 app.post('/api/candidates', ({ body }, res)=> {
     const errors = inputCheck(body, 'first_name', 'last_name', 'industry_connected');
 
@@ -167,6 +221,37 @@ app.post('/api/candidates', ({ body }, res)=> {
             id: this.lastID
         });
     }); 
+});
+
+//This route might feel a little strange because we're using a parameter for the candidate's id (req.params.id), 
+//but the request body contains the party's id (req.body.party_id). Why mix the two? Again, we want to follow 
+//best practices for consistency and clarity. The affected row's id should always be part of the 
+//route (e.g., /api/candidate/2) while the actual fields we're updating should be part of the body.
+
+//route for updating a candidates party affiliation
+app.put('/api/candidates/:id', (req, res)=> {
+    const errors = inputCheck(req.body, 'party_id');
+
+    if(errors) {
+        res.status(400).json( { error: errors} );
+        return;
+    }
+    
+    const sql = `UPDATE candidates SET party_id = ?
+                 WHERE id = ?`;
+    const params = [req.body.party_id, req.params.id];
+
+    db.run(sql, params, function(err, result) {
+        if(err) {
+            res.status(400).json({ error: err.message} );
+            return;
+        }
+        res.json({
+            message: "successfully updated candidate",
+            data: req.body,
+            changes: this.changes
+        });
+    });
 });
 
 //Default response for any other request(Not Found) catch all
